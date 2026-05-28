@@ -1,2 +1,3 @@
-# Keep the gadget DLL as binary — no line-ending normalisation.
-dwmapi.dll binary
+# Bundled Windows PE binaries — never line-ending-normalised.
+dinput8.dll binary
+frida-gadget.asi binary

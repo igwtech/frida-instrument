@@ -1,8 +1,8 @@
-Two licenses apply:
+Three licenses apply, one per bundled artifact:
 
 ================================================================
-1) THIS ADDON (addon.json, dwmapi.config.json, agent/_agent.js,
-   README.md, ADDON_README.md)
+1) THIS ADDON (addon.json, frida-gadget.config.json,
+   agent/_agent.js, README.md)
 
    Copyright (c) 2026 igwtech
 
@@ -21,7 +21,7 @@ Two licenses apply:
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
 ================================================================
-2) BUNDLED frida-gadget.dll (renamed to dwmapi.dll in this addon)
+2) BUNDLED frida-gadget.asi (the Frida gadget renamed)
 
    Frida is licensed under the wxWindows Library Licence (wxWL),
    which is a free software license based on the LGPL.
@@ -34,8 +34,8 @@ Two licenses apply:
 
    The wxWindows Library Licence requires that:
    * the binary remains identifiable as Frida (we do not modify
-     the gadget itself; only the filename was changed to act as
-     a Wine DLL proxy);
+     the gadget itself; only the file extension was changed to
+     .asi so it would be picked up by Ultimate-ASI-Loader);
    * recipients can obtain the source of the bundled gadget from
      the official Frida repository;
    * derivative works that link against the gadget may be
@@ -44,3 +44,17 @@ Two licenses apply:
    The Frida project is © 2008–present Ole André Vadla Ravnås
    and contributors. This addon is not affiliated with the
    Frida project.
+
+================================================================
+3) BUNDLED dinput8.dll (Ultimate-ASI-Loader)
+
+   Ultimate-ASI-Loader is licensed under the MIT License.
+
+   The unmodified binary is distributed verbatim from the official
+   GitHub release at
+   https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases
+
+   Copyright (c) ThirteenAG and Ultimate-ASI-Loader contributors.
+
+   This addon is not affiliated with the Ultimate-ASI-Loader
+   project.

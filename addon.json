@@ -1,16 +1,17 @@
 {
   "id": "frida-instrument",
   "name": "Frida Live Instrumentation",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": "igwtech",
-  "description": "Drops frida-gadget.dll into the game process so a Python orchestrator can hook the NC2 client at runtime — UDP cipher plaintext, session dispatcher, multipart reassembler, etc. Provides observe (event stream) and control (rpc.exports) for protocol RE and experiment automation. See README.md for orchestrator install + usage.",
+  "description": "Drops Ultimate-ASI-Loader (as dinput8.dll) + frida-gadget (as frida-gadget.asi) into the NC2 game directory. The ASI loader correctly forwards dinput8 exports so the game starts normally, and side-loads frida-gadget.asi at startup — the gadget binds 127.0.0.1:27042 in resume mode and waits for the Python orchestrator at ceres-j/tools/frida_re in the Neocron tree.",
   "category": "other",
   "tags": ["debug", "instrumentation", "protocol-re", "frida"],
   "files": [
-    { "src": "dwmapi.dll", "dst": "dwmapi.dll" },
-    { "src": "dwmapi.config.json", "dst": "dwmapi.config.json" },
+    { "src": "dinput8.dll", "dst": "dinput8.dll" },
+    { "src": "frida-gadget.asi", "dst": "frida-gadget.asi" },
+    { "src": "frida-gadget.config.json", "dst": "frida-gadget.config.json" },
     { "src": "agent/_agent.js", "dst": ".frida_re/agent/_agent.js" },
     { "src": "README.md", "dst": ".frida_re/README.md" }
   ],
-  "wineDllOverrides": ["dwmapi"]
+  "wineDllOverrides": ["dinput8"]
 }
