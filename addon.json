@@ -1,0 +1,16 @@
+{
+  "id": "frida-instrument",
+  "name": "Frida Live Instrumentation",
+  "version": "0.1.0",
+  "author": "igwtech",
+  "description": "Drops frida-gadget.dll into the game process so a Python orchestrator can hook the NC2 client at runtime — UDP cipher plaintext, session dispatcher, multipart reassembler, etc. Provides observe (event stream) and control (rpc.exports) for protocol RE and experiment automation. See README.md for orchestrator install + usage.",
+  "category": "other",
+  "tags": ["debug", "instrumentation", "protocol-re", "frida"],
+  "files": [
+    { "src": "winmm.dll", "dst": "winmm.dll" },
+    { "src": "winmm.config.json", "dst": "winmm.config.json" },
+    { "src": "agent/_agent.js", "dst": ".frida_re/agent/_agent.js" },
+    { "src": "README.md", "dst": ".frida_re/README.md" }
+  ],
+  "wineDllOverrides": ["winmm"]
+}

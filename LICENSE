@@ -1,0 +1,46 @@
+Two licenses apply:
+
+================================================================
+1) THIS ADDON (addon.json, winmm.config.json, agent/_agent.js,
+   README.md, ADDON_README.md)
+
+   Copyright (c) 2026 igwtech
+
+   Permission is hereby granted, free of charge, to any person
+   obtaining a copy of this software and associated documentation
+   files (the "Software"), to deal in the Software without
+   restriction, including without limitation the rights to use,
+   copy, modify, merge, publish, distribute, sublicense, and/or
+   sell copies of the Software, and to permit persons to whom the
+   Software is furnished to do so, subject to the following
+   conditions:
+
+   The above copyright notice and this permission notice shall be
+   included in all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+================================================================
+2) BUNDLED frida-gadget.dll (renamed to winmm.dll in this addon)
+
+   Frida is licensed under the wxWindows Library Licence (wxWL),
+   which is a free software license based on the LGPL.
+
+   The unmodified gadget binary is distributed verbatim from the
+   official Frida release at
+   https://github.com/frida/frida/releases — see the upstream
+   project for full license text and source availability:
+   https://github.com/frida/frida/blob/main/COPYING
+
+   The wxWindows Library Licence requires that:
+   * the binary remains identifiable as Frida (we do not modify
+     the gadget itself; only the filename was changed to act as
+     a Wine DLL proxy);
+   * recipients can obtain the source of the bundled gadget from
+     the official Frida repository;
+   * derivative works that link against the gadget may be
+     distributed under any license, including proprietary.
+
+   The Frida project is © 2008–present Ole André Vadla Ravnås
+   and contributors. This addon is not affiliated with the
+   Frida project.
