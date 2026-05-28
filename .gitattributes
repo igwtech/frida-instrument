@@ -1,2 +1,2 @@
 # Keep the gadget DLL as binary — no line-ending normalisation.
-winmm.dll binary
+dwmapi.dll binary

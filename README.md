@@ -20,10 +20,10 @@ https://github.com/igwtech/frida-instrument
 
 Enable the addon. The launcher will:
 
-1. Place `winmm.dll` (renamed Frida gadget) next to `neocronclient.exe`.
-2. Place `winmm.config.json` next to it (gadget listens on
+1. Place `dwmapi.dll` (renamed Frida gadget) next to `neocronclient.exe`.
+2. Place `dwmapi.config.json` next to it (gadget listens on
    `127.0.0.1:27042` in resume mode — does **not** block startup).
-3. Compose `winmm` into `WINEDLLOVERRIDES` automatically.
+3. Compose `dwmapi` into `WINEDLLOVERRIDES` automatically.
 4. Drop the agent JS at `<game>/.frida_re/agent/_agent.js` and a copy
    of this README at `<game>/.frida_re/README.md` for runtime reference.
 
@@ -49,7 +49,7 @@ python -m orchestrator --trace /tmp/frida_nc2.jsonl
 
 ## Configuration
 
-Edit `winmm.config.json` in the game dir to change defaults:
+Edit `dwmapi.config.json` in the game dir to change defaults:
 
 ```json
 {
@@ -71,7 +71,7 @@ Edit `winmm.config.json` in the game dir to change defaults:
 * `"address": "0.0.0.0"` — bind on all interfaces (useful if the
   orchestrator runs in a VM, not on the host).
 
-The launcher does not regenerate `winmm.config.json` after the first
+The launcher does not regenerate `dwmapi.config.json` after the first
 install, so your edits survive addon updates.
 
 ## Default behaviour rationale
@@ -87,19 +87,19 @@ orchestrator does not hang the game.
 
 * **renodx / ReShade**: independent. Those use `d3d9.dll`. No shared
   paths.
-* **Any other addon proxying `winmm.dll`**: declare a `conflicts`
+* **Any other addon proxying `dwmapi.dll`**: declare a `conflicts`
   relationship in that addon's manifest. Two proxies cannot share the
   same DLL slot.
 
 ## Uninstall
 
 Disable + uninstall via the launcher. The launcher's pristine pool
-restores the original game dir state — with no local `winmm.dll`,
+restores the original game dir state — with no local `dwmapi.dll`,
 Wine falls back to its System32 builtin again.
 
 ## Frida version
 
-The bundled `winmm.dll` is an unmodified release build of
+The bundled `dwmapi.dll` is an unmodified release build of
 [frida-gadget](https://github.com/frida/frida) (Windows x86). Frida
 ships gadgets per `major.minor`; major versions can change the
 agent/host protocol, so:
@@ -108,11 +108,11 @@ agent/host protocol, so:
   gadget.
 * To upgrade Frida, re-run
   [`ceres-j/tools/frida_re/setup.sh`](../setup.sh) against the game
-  dir to fetch a newer gadget, then update this addon's `winmm.dll`
+  dir to fetch a newer gadget, then update this addon's `dwmapi.dll`
   via `make addon-sync` from `ceres-j/tools/frida_re/`.
 
 ## License
 
-See [`LICENSE`](./LICENSE). The bundled `winmm.dll` is the Frida
+See [`LICENSE`](./LICENSE). The bundled `dwmapi.dll` is the Frida
 gadget under the wxWindows Library Licence (a free-software license,
 LGPL-like). The addon scripts themselves are MIT.

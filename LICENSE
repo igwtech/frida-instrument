@@ -1,7 +1,7 @@
 Two licenses apply:
 
 ================================================================
-1) THIS ADDON (addon.json, winmm.config.json, agent/_agent.js,
+1) THIS ADDON (addon.json, dwmapi.config.json, agent/_agent.js,
    README.md, ADDON_README.md)
 
    Copyright (c) 2026 igwtech
@@ -21,7 +21,7 @@ Two licenses apply:
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
 ================================================================
-2) BUNDLED frida-gadget.dll (renamed to winmm.dll in this addon)
+2) BUNDLED frida-gadget.dll (renamed to dwmapi.dll in this addon)
 
    Frida is licensed under the wxWindows Library Licence (wxWL),
    which is a free software license based on the LGPL.
