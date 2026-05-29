@@ -68,12 +68,35 @@ python -m orchestrator --trace /tmp/frida_nc2.jsonl
 
 ## Usage
 
-1. Launch the game via the Neocron launcher.
-2. Stop at the login screen — there are no game packets yet.
-3. Start the orchestrator (above). It connects to `127.0.0.1:27042`,
-   pushes the agent JS, installs hooks.
-4. Log in. Every UDP-cipher call now emits `cipher_enter` /
-   `cipher_leave` events with plaintext + seed.
+**v0.4.0 changed startup ordering.** The gadget now runs in
+**`on_load: wait`** mode so the agent JS installs hooks BEFORE
+NC2 calls `DirectInput8Create` — required for keyboard injection
+to work. Consequence: **start the orchestrator FIRST**.
+
+1. **Terminal 1:** start the orchestrator.
+
+   ```bash
+   cd /path/to/Neocron/ceres-j/tools/frida_re
+   python -m orchestrator --trace /tmp/frida_nc2.jsonl
+   ```
+
+   It binds and waits, polling `127.0.0.1:27042` until the gadget
+   appears.
+
+2. **Launcher:** click Play. The game window opens, then **pauses
+   silently inside `DllMain`**. From your perspective the game looks
+   frozen on its splash — that's the gadget waiting.
+
+3. The orchestrator's polling reaches the gadget, pushes the agent,
+   installs the hook surface. The game resumes immediately and
+   proceeds to the login screen normally.
+
+4. Log in. UDP packets decrypt live; TCP frames stream in;
+   keyboard inject becomes available via the orchestrator's CLI.
+
+**If you forget step 1:** the game hangs at startup. Recovery is
+just killing the wine process (`pkill -f neocronclient.exe`) and
+trying again. No data loss; the addon stays installed.
 
 ## Configuration
 
@@ -86,12 +109,18 @@ Edit `frida-gadget.config.json` in the game dir to change defaults:
     "address": "127.0.0.1",
     "port": 27042,
     "on_port_conflict": "fail",
-    "on_load": "resume"
+    "on_load": "wait"
   }
 }
 ```
 
-* `"on_load": "wait"` — pauses the game at process start until the
+* `"on_load": "resume"` — DOES NOT pause the game at startup; the
+  agent loads later, when the orchestrator first connects, and any
+  DirectInput / Win32 chain hooks that need to install before the
+  EXE calls into those APIs will be installed too late. Only use
+  this if you don't need keyboard injection or input hooks. The
+  default (since v0.4.0) is `wait`.
+* `"on_load": "wait"` — current default. Pauses the game at process start until the
   orchestrator connects. Use for investigating early-startup packets
   that fly before the login screen.
 * `"port": 27043` — pick another port if 27042 collides with another

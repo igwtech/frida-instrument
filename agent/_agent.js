@@ -238,6 +238,240 @@ function udpSendHandler() {
     };
 }
 
+// ── TCP capture (NC2 doesn't use ws2_32 recv/send/WSARecv/WSASend) ──
+//
+// 2026-05-28: hooked all four ws2_32 stream-socket APIs during live
+// gameplay, captured zero TCP frames in 20s. NC2 must be reaching
+// the socket via a deeper API. Three candidates worth hooking, in
+// order of likelihood:
+//   1. ntdll!NtDeviceIoControlFile with AFD IOCTL codes (the
+//      lowest user-mode socket I/O on Windows / Wine).
+//   2. kernel32!ReadFile / WriteFile on the socket handle (some
+//      games route through these when overlapped I/O is in use).
+//
+// We hook all three. Filter on the orchestrator side by content:
+// NC2 TCP frames start with the byte 0xfe (FE-framing marker), so
+// any chunk where the first byte is 0xfe is interesting.
+
+function tcpReadFileHandler() {
+    return {
+        onEnter(args) {
+            this._handle = args[0];
+            this._buf    = args[1];
+        },
+        onLeave(retval) {
+            // ReadFile returns BOOL — but the actual bytes-read is in
+            // the lpNumberOfBytesRead OUT param (args[3] on x86).
+            try {
+                // We don't have args here in onLeave; use captured this.
+                // Heuristic: read the first 256 bytes from buf and emit
+                // if it looks like an FE-framed packet.
+                const head = new Uint8Array(this._buf.readByteArray(256));
+                if (head.length >= 3 && head[0] === 0xfe) {
+                    const size = head[1] | (head[2] << 8);
+                    send({
+                        ev: 'tcp_read',
+                        handle: '0x' + this._handle.toString(16),
+                        hex: bufHex(this._buf, Math.min(size + 3, DUMP_LIMIT)),
+                        ts: nowNs(),
+                    });
+                }
+            } catch (e) { /* not a readable buffer */ }
+        },
+    };
+}
+
+function tcpWriteFileHandler() {
+    return {
+        onEnter(args) {
+            const handle = args[0];
+            const buf = args[1];
+            const len = args[2].toInt32();
+            if (len <= 0 || len > 0x10000) return;
+            try {
+                const head = new Uint8Array(buf.readByteArray(Math.min(len, 3)));
+                if (head.length >= 1 && head[0] === 0xfe) {
+                    send({
+                        ev: 'tcp_write',
+                        handle: '0x' + handle.toString(16),
+                        len: len,
+                        hex: bufHex(buf, Math.min(len, DUMP_LIMIT)),
+                        ts: nowNs(),
+                    });
+                }
+            } catch (e) { /* skip */ }
+        },
+    };
+}
+
+// Wine maps NtDeviceIoControlFile via the AFD driver. AFD IOCTL codes
+// for socket recv = 0x12017, send = 0x1201f. Newer Wine variants may
+// route differently — we accept all IOCTLs and let the orchestrator
+// filter.
+function tcpIoctlHandler() {
+    return {
+        onEnter(args) {
+            const handle = args[0];
+            const ioctl = args[5].toInt32();
+            const inBuf = args[6];
+            const inLen = args[7].toInt32();
+            const outBuf = args[8];
+            const outLen = args[9].toInt32();
+            // Only emit on plausible buffer sizes.
+            this._handle = handle;
+            this._ioctl  = ioctl;
+            this._inBuf  = inBuf;
+            this._inLen  = inLen;
+            this._outBuf = outBuf;
+            this._outLen = outLen;
+        },
+        onLeave(retval) {
+            try {
+                let hex = '';
+                let kind = '?';
+                if (this._inLen > 0 && this._inLen < 0x10000) {
+                    const probe = new Uint8Array(
+                        this._inBuf.readByteArray(Math.min(3, this._inLen)));
+                    if (probe.length >= 1 && probe[0] === 0xfe) {
+                        hex = bufHex(this._inBuf,
+                                     Math.min(this._inLen, DUMP_LIMIT));
+                        kind = 'send';
+                    }
+                }
+                if (hex === '' && this._outLen > 0 && this._outLen < 0x10000) {
+                    const probe = new Uint8Array(
+                        this._outBuf.readByteArray(Math.min(3, this._outLen)));
+                    if (probe.length >= 1 && probe[0] === 0xfe) {
+                        hex = bufHex(this._outBuf,
+                                     Math.min(this._outLen, DUMP_LIMIT));
+                        kind = 'recv';
+                    }
+                }
+                if (hex !== '') {
+                    send({
+                        ev: 'tcp_ioctl',
+                        ioctl: '0x' + this._ioctl.toString(16),
+                        kind: kind,
+                        handle: '0x' + this._handle.toString(16),
+                        hex: hex,
+                        ts: nowNs(),
+                    });
+                }
+            } catch (e) {}
+        },
+    };
+}
+
+// ── DirectInput8 chain hook for input control ────────────────────────
+//
+// With on_load:wait (gadget v0.4.0+), the agent JS runs BEFORE NC2
+// calls DirectInput8Create. We chain-hook the COM creation path so
+// we capture the keyboard device's vtable when it's created.
+//
+// Once captured, rpc.exports.dik_press(dik, on) toggles a key in our
+// inject map. Our GetDeviceData / GetDeviceState hook modifies the
+// returned state buffer to set/clear that key.
+
+globalThis.__DI8_INJECT = {};   // {dik: 0x80 | 0}
+let DI8_DEVICE_VT = null;       // captured at CreateDevice time
+
+function attachDI8Chain() {
+    const di8 = Process.findModuleByName('dinput8.dll')
+             || Process.findModuleByName('DINPUT8.DLL');
+    if (di8 === null) {
+        send({ ev: 'di_unavailable' });
+        return;
+    }
+    const DI8Create = di8.findExportByName('DirectInput8Create');
+    if (DI8Create === null) return;
+
+    Interceptor.attach(DI8Create, {
+        onEnter(args) { this._ppv = args[4]; },
+        onLeave(retval) {
+            if (retval.toInt32() !== 0) return;
+            try {
+                const pIDI8 = this._ppv.readPointer();
+                if (pIDI8.isNull()) return;
+                const vt = pIDI8.readPointer();
+                // IDirectInput8 vtable slot 3 = CreateDevice (x86 cdecl).
+                const pCD = vt.add(3 * 4).readPointer();
+                Interceptor.attach(pCD, {
+                    onEnter(args) {
+                        // **thiscall**: args[0] = REFGUID rguid (first
+                        // STACK arg after `this` in ECX).
+                        this._rguid  = args[0];
+                        this._ppDev  = args[1];
+                    },
+                    onLeave(r) {
+                        if (r.toInt32() !== 0) return;
+                        try {
+                            const pDev = this._ppDev.readPointer();
+                            if (pDev.isNull()) return;
+                            const dvt = pDev.readPointer();
+                            // Slot 9 = GetDeviceState; slot 10 = GetDeviceData.
+                            // Hook BOTH — whichever NC2 uses for keyboard.
+                            const pGDS = dvt.add(9 * 4).readPointer();
+                            const pGDD = dvt.add(10 * 4).readPointer();
+                            DI8_DEVICE_VT = '0x' + dvt.toString(16);
+                            send({ ev: 'di_device_created',
+                                   vtable: DI8_DEVICE_VT,
+                                   getDeviceState: '0x' + pGDS.toString(16),
+                                   getDeviceData:  '0x' + pGDD.toString(16) });
+                            installGDSHook(pGDS);
+                            installGDDHook(pGDD);
+                        } catch (e) {
+                            send({ ev: 'di_hook_err', phase: 'CreateDevice',
+                                   err: String(e) });
+                        }
+                    },
+                });
+                send({ ev: 'di_idi8_hooked' });
+            } catch (e) {
+                send({ ev: 'di_hook_err', phase: 'DI8Create',
+                       err: String(e) });
+            }
+        },
+    });
+    send({ ev: 'di_chain_armed' });
+}
+
+function installGDSHook(addr) {
+    Interceptor.attach(addr, {
+        onEnter(args) {
+            // thiscall: args[0]=cbData, args[1]=lpvData (this is in ECX).
+            this._cb  = args[0].toInt32();
+            this._lpv = args[1];
+        },
+        onLeave(retval) {
+            if (retval.toInt32() !== 0) return;
+            if (this._cb !== 256) return;   // keyboard state size
+            const inj = globalThis.__DI8_INJECT;
+            const keys = Object.keys(inj);
+            if (keys.length === 0) return;
+            try {
+                for (const dik of keys) {
+                    this._lpv.add(parseInt(dik)).writeU8(inj[dik] ? 0x80 : 0);
+                }
+            } catch (e) {}
+        },
+    });
+}
+
+function installGDDHook(addr) {
+    // GetDeviceData buffer-based — used when the device is in
+    // buffered mode. Each element is a DIDEVICEOBJECTDATA (16 bytes).
+    // For injection we'd need to ADD events to the buffer, which is
+    // more invasive. For v0.4.0 we just observe.
+    Interceptor.attach(addr, {
+        onLeave(retval) {
+            // Just count calls so we know if NC2 uses buffered mode.
+            send({ ev: 'di_get_data_called' });
+        },
+    });
+}
+
+attachDI8Chain();
+
 // Map from hook-name to a factory. Adding a new hook == adding it to
 // orchestrator/symbols.py (with implemented=true) AND registering it
 // here. Legacy in-EXE-offset hooks (udp_cipher_a/b) used cipherHandler
@@ -246,6 +480,9 @@ function udpSendHandler() {
 const HOOK_FACTORIES = {
     udp_recv: udpRecvHandler,
     udp_send: udpSendHandler,
+    tcp_read: tcpReadFileHandler,
+    tcp_write: tcpWriteFileHandler,
+    tcp_ioctl: tcpIoctlHandler,
     udp_cipher_a: cipherHandler,
     udp_cipher_b: cipherHandler,
 };
@@ -400,5 +637,26 @@ rpc.exports = {
                phase: 'rpc',
                error: 'sendUdp not yet wired — pin cipher signature first' });
         return -1;
+    },
+
+    // ── DirectInput keyboard injection ────────────────────────────
+    //
+    // Press/release a DirectInput key. The keyboard device must have
+    // been created AFTER the agent loaded (true under on_load:wait).
+    // Common DIK codes:
+    //   0x11 = W   0x1F = S   0x1E = A   0x20 = D   0x39 = Space
+    //   0x1C = Return  0x01 = Escape
+    // See: dinputd.h DIK_* constants.
+    dikPress(dik, on) {
+        globalThis.__DI8_INJECT[dik] = on ? 1 : 0;
+        return {
+            device_vtable: DI8_DEVICE_VT,
+            active_keys: Object.keys(globalThis.__DI8_INJECT)
+                .filter(k => globalThis.__DI8_INJECT[k]),
+        };
+    },
+    dikClear() {
+        globalThis.__DI8_INJECT = {};
+        return 0;
     },
 };

@@ -1,9 +1,9 @@
 {
   "id": "frida-instrument",
   "name": "Frida Live Instrumentation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "igwtech",
-  "description": "Drops Ultimate-ASI-Loader (as dinput8.dll) + frida-gadget (as frida-gadget.asi) into the NC2 game directory. ASI loader correctly forwards dinput8 exports so the game starts normally; gadget binds 127.0.0.1:27042 in resume mode. Companion orchestrator at ceres-j/tools/frida_re hooks ws2_32!recvfrom/sendto and decrypts NC2 UDP datagrams live with the LFSR+CFB cipher.",
+  "description": "Drops Ultimate-ASI-Loader + frida-gadget into the NC2 game directory for in-Wine instrumentation. The gadget binds 127.0.0.1:27042 in **wait** mode — game pauses at DllMain until orchestrator connects, then proceeds. Companion orchestrator at ceres-j/tools/frida_re hooks ws2_32!recvfrom/sendto for UDP (auto-decrypted via LFSR+CFB) plus kernel32!ReadFile/WriteFile + ntdll!NtDeviceIoControlFile for TCP frames, plus a DirectInput8 chain hook for keyboard injection via rpc.exports.dikPress.",
   "category": "other",
   "tags": ["debug", "instrumentation", "protocol-re", "frida"],
   "files": [
