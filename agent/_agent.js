@@ -175,10 +175,77 @@ function cipherHandler(hookName) {
     };
 }
 
+// ── Winsock UDP capture handlers ─────────────────────────────────────
+//
+// recvfrom prototype:
+//   int recvfrom(SOCKET s, char* buf, int len, int flags,
+//                sockaddr* from, int* fromlen)
+// onLeave: retval is bytes_read (-1 on error, 0 on graceful close).
+// We dump exactly retval bytes from the buf pointer captured onEnter.
+//
+// sendto prototype:
+//   int sendto(SOCKET s, const char* buf, int len, int flags,
+//              const sockaddr* to, int tolen)
+// onEnter: dump exactly `len` bytes from buf. Truncated at DUMP_LIMIT
+// to keep the send() channel sane on jumbo packets.
+
+function udpRecvHandler() {
+    return {
+        onEnter(args) {
+            this._sock = args[0].toInt32();
+            this._buf  = args[1];
+        },
+        onLeave(retval) {
+            try {
+                const n = retval.toInt32();
+                if (n <= 0) return;
+                send({
+                    ev: 'udp_recv',
+                    sock: this._sock,
+                    len: n,
+                    hex: bufHex(this._buf, Math.min(n, DUMP_LIMIT)),
+                    tid: this.threadId,
+                    ts: nowNs(),
+                });
+            } catch (e) {
+                send({ ev: 'hook_error', hook: 'udp_recv',
+                       phase: 'leave', error: String(e) });
+            }
+        },
+    };
+}
+
+function udpSendHandler() {
+    return {
+        onEnter(args) {
+            try {
+                const sock = args[0].toInt32();
+                const len  = args[2].toInt32();
+                if (len <= 0 || len > 0x10000) return;
+                send({
+                    ev: 'udp_send',
+                    sock: sock,
+                    len: len,
+                    hex: bufHex(args[1], Math.min(len, DUMP_LIMIT)),
+                    tid: this.threadId,
+                    ts: nowNs(),
+                });
+            } catch (e) {
+                send({ ev: 'hook_error', hook: 'udp_send',
+                       phase: 'enter', error: String(e) });
+            }
+        },
+    };
+}
+
 // Map from hook-name to a factory. Adding a new hook == adding it to
 // orchestrator/symbols.py (with implemented=true) AND registering it
-// here.
+// here. Legacy in-EXE-offset hooks (udp_cipher_a/b) used cipherHandler
+// — kept available for future use even though the canonical path is
+// now Winsock-based.
 const HOOK_FACTORIES = {
+    udp_recv: udpRecvHandler,
+    udp_send: udpSendHandler,
     udp_cipher_a: cipherHandler,
     udp_cipher_b: cipherHandler,
 };
@@ -190,6 +257,28 @@ const HOOK_FACTORIES = {
 const HOOK_TABLE = globalThis.__FRIDA_RE_HOOKS__ || [];
 const INSTALLED = [];
 
+function resolveHookAddress(entry, moduleBase) {
+    if (entry.mode === 'export') {
+        const mod = Process.findModuleByName(entry.module)
+                 || Process.findModuleByName(entry.module.toUpperCase());
+        if (mod === null) {
+            throw new Error(`module not loaded: ${entry.module}`);
+        }
+        const addr = mod.findExportByName(entry.symbol);
+        if (addr === null) {
+            throw new Error(`export not found: ${entry.module}!${entry.symbol}`);
+        }
+        return addr;
+    }
+    if (entry.mode === 'offset' || entry.offset !== undefined) {
+        if (moduleBase === null) {
+            throw new Error(`${MODULE_NAME} not loaded — cannot resolve offset`);
+        }
+        return moduleBase.add(entry.offset);
+    }
+    throw new Error(`unknown hook mode: ${entry.mode}`);
+}
+
 function installHooks(moduleBase) {
     for (const entry of HOOK_TABLE) {
         const factory = HOOK_FACTORIES[entry.name];
@@ -199,7 +288,14 @@ function installHooks(moduleBase) {
                    error: 'no factory registered in agent JS' });
             continue;
         }
-        const addr = moduleBase.add(entry.offset);
+        let addr;
+        try {
+            addr = resolveHookAddress(entry, moduleBase);
+        } catch (e) {
+            send({ ev: 'hook_error', hook: entry.name,
+                   phase: 'resolve', error: String(e) });
+            continue;
+        }
         try {
             const listener = Interceptor.attach(addr, factory(entry.name));
             INSTALLED.push({ name: entry.name, addr: addr,

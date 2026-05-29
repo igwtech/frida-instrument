@@ -1,9 +1,9 @@
 {
   "id": "frida-instrument",
   "name": "Frida Live Instrumentation",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "igwtech",
-  "description": "Drops Ultimate-ASI-Loader (as dinput8.dll) + frida-gadget (as frida-gadget.asi) into the NC2 game directory. The ASI loader correctly forwards dinput8 exports so the game starts normally, and side-loads frida-gadget.asi at startup — the gadget binds 127.0.0.1:27042 in resume mode and waits for the Python orchestrator at ceres-j/tools/frida_re in the Neocron tree.",
+  "description": "Drops Ultimate-ASI-Loader (as dinput8.dll) + frida-gadget (as frida-gadget.asi) into the NC2 game directory. ASI loader correctly forwards dinput8 exports so the game starts normally; gadget binds 127.0.0.1:27042 in resume mode. Companion orchestrator at ceres-j/tools/frida_re hooks ws2_32!recvfrom/sendto and decrypts NC2 UDP datagrams live with the LFSR+CFB cipher.",
   "category": "other",
   "tags": ["debug", "instrumentation", "protocol-re", "frida"],
   "files": [
